@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:aube/database/database.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:aube/services/auth_service.dart';
 
 class AccueilPage extends StatefulWidget {
   final VoidCallback? onSeeAll;
@@ -13,6 +15,23 @@ class AccueilPage extends StatefulWidget {
 
 class _AccueilPageState extends State<AccueilPage> {
   final AppDatabase _database = AppDatabase();
+  String? _userId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserId();
+  }
+
+  Future<void> _loadUserId() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final id = await authService.getUserId();
+    if (mounted) {
+      setState(() {
+        _userId = id;
+      });
+    }
+  }
 
   // Luxury Purple Palette Constants
   static const Color purpleRoyal = Color(0xFF6200EE);
@@ -21,8 +40,6 @@ class _AccueilPageState extends State<AccueilPage> {
   static const Color white = Color(0xFFFFFFFF);
   static const Color textPrimary = Color(0xFF1E1B4B);
   static const Color textSecondary = Color(0xFF94A3B8);
-  static const Color accentPink = Color(0xFFF472B6);
-  static const Color accentBlue = Color(0xFF60A5FA);
 
   // Strict BoxShadow Rule
   static const List<BoxShadow> luxuryShadow = [
@@ -87,7 +104,9 @@ class _AccueilPageState extends State<AccueilPage> {
           ),
           const SizedBox(height: 10),
           StreamBuilder<List<CoinsTableData>>(
-            stream: _database.select(_database.coinsTable).watch(),
+            stream: _userId == null 
+                ? const Stream.empty() 
+                : (_database.select(_database.coinsTable)..where((t) => t.userId.equals(_userId!))).watch(),
             builder: (context, snapshot) {
               final total =
                   snapshot.data?.fold(0.0, (sum, item) => sum + item.montant) ??
@@ -143,8 +162,8 @@ class _AccueilPageState extends State<AccueilPage> {
 
   // 2. Quick Actions (Transparent Glass Style)
   Widget _buildQuickActions() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 32, horizontal: 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         /* children: [
@@ -215,8 +234,10 @@ class _AccueilPageState extends State<AccueilPage> {
 
   Widget _buildTransactionList() {
     return StreamBuilder<List<CoinsTableData>>(
-      stream:
-          (_database.select(_database.coinsTable)
+      stream: _userId == null
+          ? const Stream.empty()
+          : (_database.select(_database.coinsTable)
+                ..where((t) => t.userId.equals(_userId!))
                 ..orderBy([(t) => OrderingTerm.desc(t.dateDeTransaction)])
                 ..limit(15))
               .watch(),

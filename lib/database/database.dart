@@ -22,7 +22,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase._internal() : super(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -35,6 +35,11 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from == 2) {
         print("Migration de 2 vers 3 effectuée");
+      }
+      if (from < 4) {
+        // Ajout de la colonne userId
+        await migrator.addColumn(coinsTable, coinsTable.userId);
+        print("Migration vers v4: ajout colonne userId");
       }
     },
   );
@@ -53,13 +58,14 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ==== COMPTE TOTAL JOURNALIER ====
-  Stream<int> countTotalTransactions() {
+  Stream<int> countTotalTransactions(String userId) {
     final start = _todayStart();
     final end = _todayEnd();
     return select(coinsTable).watch().map((rows) {
       final todayCount = rows
           .where(
             (row) =>
+                row.userId == userId &&
                 row.dateDeTransaction.isAfter(
                   start.subtract(const Duration(seconds: 1)),
                 ) &&
@@ -71,9 +77,9 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ==== NUCLEUS: COMPTE PAR HEURE SUR UN INTERVALLE ====
-  Stream<Map<int, int>> countByHourInRange(DateTime start, DateTime end) {
+  Stream<Map<int, int>> countByHourInRange(DateTime start, DateTime end, String userId) {
     return (select(coinsTable)
-          ..where((t) => t.dateDeTransaction.isBetweenValues(start, end)))
+          ..where((t) => t.dateDeTransaction.isBetweenValues(start, end) & t.userId.equals(userId)))
         .watch()
         .map((rows) {
           final map = <int, int>{};
@@ -86,18 +92,19 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ==== STATS JOURNALIÈRE PAR HEURE (H) ====
-  Stream<Map<int, int>> countByHourToday() {
+  Stream<Map<int, int>> countByHourToday(String userId) {
     final start = _todayStart();
     final end = _todayEnd();
-    return countByHourInRange(start, end);
+    return countByHourInRange(start, end, userId);
   }
 
   // H(h) pour la journée, filtré par type
-  Stream<Map<int, int>> countByHourTodayByType(String type) {
+  Stream<Map<int, int>> countByHourTodayByType(String type, String userId) {
     final start = _todayStart();
     final end = _todayEnd();
     return (select(coinsTable)..where(
           (t) =>
+              t.userId.equals(userId) &
               t.dateDeTransaction.isBetweenValues(start, end) &
               t.typeDeTransaction.equals(type),
         ))
@@ -113,14 +120,14 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ==== STATS JOURNALIÈRE TOTALE (J = Σ H) ====
-  Stream<int> countTotalTodayFromHours() {
-    return countByHourToday().map((byHour) {
+  Stream<int> countTotalTodayFromHours(String userId) {
+    return countByHourToday(userId).map((byHour) {
       return byHour.values.fold(0, (sum, v) => sum + v);
     });
   }
 
   // ==== SOLDE TOTAL ====
-  Stream<double> soldeTotalStream() => select(coinsTable).watch().map(
+  Stream<double> soldeTotalStream(String userId) => (select(coinsTable)..where((t) => t.userId.equals(userId))).watch().map(
     (coins) => coins.fold<double>(0.0, (sum, coin) {
       switch (coin.typeDeTransaction) {
         case 'Retrait':
@@ -135,10 +142,10 @@ class AppDatabase extends _$AppDatabase {
   );
 
   // ==== STATS JOURNALIÈRES PAR TYPE ====
-  Stream<Map<String, int>> countTransactionsByType() {
+  Stream<Map<String, int>> countTransactionsByType(String userId) {
     final start = _todayStart();
     final end = _todayEnd();
-    return select(coinsTable).watch().map((coins) {
+    return (select(coinsTable)..where((t) => t.userId.equals(userId))).watch().map((coins) {
       final todayCoins = coins.where(
         (c) =>
             c.dateDeTransaction.isAfter(
@@ -155,10 +162,10 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ==== STATS JOURNALIÈRES PAR OPÉRATEUR ====
-  Stream<Map<String, int>> countTransactionsByOperator() {
+  Stream<Map<String, int>> countTransactionsByOperator(String userId) {
     final start = _todayStart();
     final end = _todayEnd();
-    return select(coinsTable).watch().map((coins) {
+    return (select(coinsTable)..where((t) => t.userId.equals(userId))).watch().map((coins) {
       final todayCoins = coins.where(
         (c) =>
             c.dateDeTransaction.isAfter(
@@ -177,10 +184,11 @@ class AppDatabase extends _$AppDatabase {
   // Opérateurs JOURNÉE filtrés par type
   Stream<Map<String, int>> countTransactionsByOperatorTodayForType(
     String type,
+    String userId,
   ) {
     final start = _todayStart();
     final end = _todayEnd();
-    return select(coinsTable).watch().map((coins) {
+    return (select(coinsTable)..where((t) => t.userId.equals(userId))).watch().map((coins) {
       final todayCoins = coins.where(
         (c) =>
             c.dateDeTransaction.isAfter(
@@ -199,11 +207,11 @@ class AppDatabase extends _$AppDatabase {
 
   // ==== HEURE → OPÉRATEUR → TYPE (structure détaillée pour la journée) ====
   Stream<Map<String, Map<String, Map<String, int>>>>
-  countTransactionsByHourOperatorTypeToday() {
+  countTransactionsByHourOperatorTypeToday(String userId) {
     final start = _todayStart();
     final end = _todayEnd();
 
-    return select(coinsTable).watch().map((coins) {
+    return (select(coinsTable)..where((t) => t.userId.equals(userId))).watch().map((coins) {
       final todayCoins = coins.where(
         (c) =>
             c.dateDeTransaction.isAfter(
@@ -231,12 +239,12 @@ class AppDatabase extends _$AppDatabase {
 
   // ==== STATS SEMAINE ====
   // Jours de la semaine
-  Stream<Map<String, int>> countTransactionsByWeekDay({String? typeFilter}) {
+  Stream<Map<String, int>> countTransactionsByWeekDay(String userId, {String? typeFilter}) {
     final start = _startOfWeek(DateTime.now());
     final end = start.add(const Duration(days: 7));
     const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
-    return select(coinsTable).watch().map((coins) {
+    return (select(coinsTable)..where((t) => t.userId.equals(userId))).watch().map((coins) {
       final map = {for (var d in days) d: 0};
       for (final coin in coins) {
         final dt = coin.dateDeTransaction;
@@ -253,10 +261,10 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // Opérateurs semaine
-  Stream<Map<String, int>> countTransactionsByOperatorWeek() {
+  Stream<Map<String, int>> countTransactionsByOperatorWeek(String userId) {
     final start = _startOfWeek(DateTime.now());
     final end = start.add(const Duration(days: 7));
-    return select(coinsTable).watch().map((coins) {
+    return (select(coinsTable)..where((t) => t.userId.equals(userId))).watch().map((coins) {
       final map = <String, int>{};
       for (final coin in coins) {
         final dt = coin.dateDeTransaction;
@@ -270,10 +278,10 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // Opérateurs semaine filtrés par type (POUR LES FILTRES CHOICECHIP)
-  Stream<Map<String, int>> countTransactionsByOperatorWeekForType(String type) {
+  Stream<Map<String, int>> countTransactionsByOperatorWeekForType(String type, String userId) {
     final start = _startOfWeek(DateTime.now());
     final end = start.add(const Duration(days: 7));
-    return select(coinsTable).watch().map((coins) {
+    return (select(coinsTable)..where((t) => t.userId.equals(userId))).watch().map((coins) {
       final map = <String, int>{};
       for (final coin in coins) {
         final dt = coin.dateDeTransaction;
@@ -288,10 +296,10 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // Types semaine
-  Stream<Map<String, int>> countTransactionsByTypeWeek() {
+  Stream<Map<String, int>> countTransactionsByTypeWeek(String userId) {
     final start = _startOfWeek(DateTime.now());
     final end = start.add(const Duration(days: 7));
-    return select(coinsTable).watch().map((coins) {
+    return (select(coinsTable)..where((t) => t.userId.equals(userId))).watch().map((coins) {
       final map = <String, int>{};
       for (final coin in coins) {
         final dt = coin.dateDeTransaction;
@@ -305,8 +313,8 @@ class AppDatabase extends _$AppDatabase {
   } // ← Fermer proprement
 
   // ==== STATS ANNUELLES ====
-  Stream<Map<String, int>> countTransactionsByYear() {
-    return select(coinsTable).watch().map((coins) {
+  Stream<Map<String, int>> countTransactionsByYear(String userId) {
+    return (select(coinsTable)..where((t) => t.userId.equals(userId))).watch().map((coins) {
       final Map<String, int> yearsCount = {};
       for (final coin in coins) {
         final year = coin.dateDeTransaction.year.toString();
@@ -317,8 +325,8 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ==== STATS MENSUELLES ====
-  Stream<Map<String, int>> countTransactionsByMonth() {
-    return select(coinsTable).watch().map((coins) {
+  Stream<Map<String, int>> countTransactionsByMonth(String userId) {
+    return (select(coinsTable)..where((t) => t.userId.equals(userId))).watch().map((coins) {
       final Map<String, int> monthsCount = {};
       for (final coin in coins) {
         final monthKey =
@@ -364,12 +372,12 @@ class AppDatabase extends _$AppDatabase {
   Future<int> insertCoin(CoinsTableCompanion coin) =>
       into(coinsTable).insert(coin);
 
-  Future<List<CoinsTableData>> getAllCoins() => select(coinsTable).get();
+  Future<List<CoinsTableData>> getAllCoins(String userId) => (select(coinsTable)..where((t) => t.userId.equals(userId))).get();
 
-  Stream<List<CoinsTableData>> watchAllCoins() => select(coinsTable).watch();
+  Stream<List<CoinsTableData>> watchAllCoins(String userId) => (select(coinsTable)..where((t) => t.userId.equals(userId))).watch();
 
-  Future<int> deleteCoin(int id) =>
-      (delete(coinsTable)..where((t) => t.id.equals(id))).go();
+  Future<int> deleteCoin(int id, String userId) =>
+      (delete(coinsTable)..where((t) => t.id.equals(id) & t.userId.equals(userId))).go();
 
   Future<void> updateCoin(CoinsTableData coin) async {
     await update(coinsTable).replace(coin);

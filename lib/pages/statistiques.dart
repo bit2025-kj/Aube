@@ -3,7 +3,10 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:aube/database/database.dart';
 import 'package:iconsax/iconsax.dart';
+
 import 'dart:math' as math;
+import 'package:provider/provider.dart';
+import 'package:aube/services/auth_service.dart';
 
 class StatistiquesPage extends StatefulWidget {
   const StatistiquesPage({Key? key}) : super(key: key);
@@ -14,6 +17,23 @@ class StatistiquesPage extends StatefulWidget {
 
 class _StatistiquesPageState extends State<StatistiquesPage> {
   final AppDatabase db = AppDatabase();
+  String? _userId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserId();
+  }
+
+  Future<void> _loadUserId() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final id = await authService.getUserId();
+    if (mounted) {
+      setState(() {
+        _userId = id;
+      });
+    }
+  }
 
   // --- Filtres ---
   List<String> selectedOperators = [
@@ -33,7 +53,6 @@ class _StatistiquesPageState extends State<StatistiquesPage> {
   static const Color white = Colors.white;
   static const Color textMain = Color(0xFF2D3142);
   static const Color purpleRoyal = Color(0xFF6200EE);
-  static const Color purpleElectric = Color(0xFFA855F7);
 
   // Couleurs pour les opérateurs
   static const Map<String, Color> operatorColors = {
@@ -49,8 +68,10 @@ class _StatistiquesPageState extends State<StatistiquesPage> {
     return Scaffold(
       backgroundColor: bgLight,
       body: SafeArea(
-        child: StreamBuilder<List<CoinsTableData>>(
-          stream: db.select(db.coinsTable).watch(),
+      child: StreamBuilder<List<CoinsTableData>>(
+          stream: _userId == null
+              ? const Stream.empty()
+              : (db.select(db.coinsTable)..where((t) => t.userId.equals(_userId!))).watch(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
               return const Center(
@@ -336,9 +357,6 @@ class _StatistiquesPageState extends State<StatistiquesPage> {
     final maxAmount = amounts.isEmpty
         ? 0.0
         : amounts.reduce((a, b) => a > b ? a : b);
-    final minAmount = amounts.isEmpty
-        ? 0.0
-        : amounts.reduce((a, b) => a < b ? a : b);
 
     // Auto-ajustement intelligent de l'échelle
     double chartMaxY;

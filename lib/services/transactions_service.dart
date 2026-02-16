@@ -2,13 +2,11 @@
 
 import 'dart:convert';
 import 'package:aube/services/api_service.dart';
-import 'package:aube/database/database.dart';
 
 class TransactionService {
   final ApiService _apiService;
-  final AppDatabase _localDb;
 
-  TransactionService(this._apiService, this._localDb);
+  TransactionService(this._apiService);
 
   /// Synchronise les transactions locales vers le serveur
   Future<bool> syncLocalTransactions(List<Map<String, dynamic>> transactionsData) async {

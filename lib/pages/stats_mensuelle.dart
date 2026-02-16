@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:aube/database/database.dart';
+import 'package:provider/provider.dart';
+import 'package:aube/services/auth_service.dart';
 
 const Color kPrimaryColor = Color(0xFF3A4F7A);
 const Color kWhite = Color(0xFFFFFFFF);
@@ -10,6 +12,7 @@ class MonthlyViewPage extends StatefulWidget {
   const MonthlyViewPage({super.key});
 
   @override
+  @override
   State<MonthlyViewPage> createState() => _MonthlyViewPageState();
 }
 
@@ -18,6 +21,23 @@ enum MonthlyFilter { all, depot, retrait, transfert }
 class _MonthlyViewPageState extends State<MonthlyViewPage> {
   final AppDatabase _database = AppDatabase();
   MonthlyFilter _monthlyFilter = MonthlyFilter.all;
+  String? _userId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserId();
+  }
+
+  Future<void> _loadUserId() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final id = await authService.getUserId();
+    if (mounted) {
+      setState(() {
+        _userId = id;
+      });
+    }
+  }
 
   String formatSolde(double value) {
     if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}M';
@@ -26,18 +46,19 @@ class _MonthlyViewPageState extends State<MonthlyViewPage> {
   }
 
   Stream<Map<String, int>> _monthlyStreamFiltered() {
+    if (_userId == null) return const Stream.empty();
     switch (_monthlyFilter) {
       case MonthlyFilter.depot:
         return _database
-            .countTransactionsByMonth(); // TODO: ajouter filtre type
+            .countTransactionsByMonth(_userId!); // TODO: ajouter filtre type
       case MonthlyFilter.retrait:
         return _database
-            .countTransactionsByMonth(); // TODO: ajouter filtre type
+            .countTransactionsByMonth(_userId!); // TODO: ajouter filtre type
       case MonthlyFilter.transfert:
         return _database
-            .countTransactionsByMonth(); // TODO: ajouter filtre type
+            .countTransactionsByMonth(_userId!); // TODO: ajouter filtre type
       case MonthlyFilter.all:
-        return _database.countTransactionsByMonth();
+        return _database.countTransactionsByMonth(_userId!);
     }
   }
 
@@ -93,7 +114,7 @@ class _MonthlyViewPageState extends State<MonthlyViewPage> {
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   StreamBuilder<double>(
-                    stream: _database.soldeTotalStream(),
+                    stream: _userId == null ? const Stream.empty() : _database.soldeTotalStream(_userId!),
                     initialData: 0.0,
                     builder: (context, snapshot) => Text(
                       formatSolde(snapshot.data ?? 0),
@@ -115,7 +136,7 @@ class _MonthlyViewPageState extends State<MonthlyViewPage> {
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   StreamBuilder<List<CoinsTableData>>(
-                    stream: _database.watchAllCoins(),
+                    stream: _userId == null ? const Stream.empty() : _database.watchAllCoins(_userId!),
                     builder: (context, snapshot) {
                       final total = snapshot.data?.length ?? 0;
                       return Text(
@@ -316,8 +337,8 @@ class _MonthlyViewPageState extends State<MonthlyViewPage> {
             boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
           ),
           child: StreamBuilder<Map<String, int>>(
-            stream: _database
-                .countTransactionsByMonth(), // TODO: filtre mois courant
+            stream: _userId == null ? const Stream.empty() : _database
+                .countTransactionsByMonth(_userId!), // TODO: filtre mois courant
             builder: (context, snapshot) {
               if (!snapshot.hasData || snapshot.data!.isEmpty) {
                 return const Center(
@@ -411,8 +432,8 @@ class _MonthlyViewPageState extends State<MonthlyViewPage> {
             boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
           ),
           child: StreamBuilder<Map<String, int>>(
-            stream: _database
-                .countTransactionsByMonth(), // TODO: filtre mois courant
+            stream: _userId == null ? const Stream.empty() : _database
+                .countTransactionsByMonth(_userId!), // TODO: filtre mois courant
             builder: (context, snapshot) {
               if (!snapshot.hasData || snapshot.data!.isEmpty) {
                 return const Center(

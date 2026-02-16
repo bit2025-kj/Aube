@@ -1,6 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:aube/database/database.dart';
+import 'package:provider/provider.dart';
+import 'package:aube/services/auth_service.dart';
 
 const Color kPrimaryColor = Color(0xFF3A4F7A);
 const Color kWhite = Color(0xFFFFFFFF);
@@ -20,6 +22,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
   final AppDatabase _database = AppDatabase();
   HourFilterType _hourFilter = HourFilterType.all;
   OperatorFilterType _operatorFilter = OperatorFilterType.all;
+  String? _userId;
 
   String formatSolde(double value) {
     if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}M';
@@ -30,7 +33,18 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
   @override
   void initState() {
     super.initState();
-    _database.debugTodayData(); // Debug JOURNÉE uniquement
+    _loadUserId();
+    // _database.debugTodayData(); // Removed or needs userId
+  }
+
+  Future<void> _loadUserId() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final id = await authService.getUserId();
+    if (mounted) {
+      setState(() {
+        _userId = id;
+      });
+    }
   }
 
   Color _getOperatorColor(String op) {
@@ -105,7 +119,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   StreamBuilder<double>(
-                    stream: _database.soldeTotalStream(),
+                    stream: _userId == null ? const Stream.empty() : _database.soldeTotalStream(_userId!),
                     builder: (context, snapshot) => Text(
                       formatSolde(snapshot.data ?? 0),
                       style: const TextStyle(
@@ -127,7 +141,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
                   ),
                   StreamBuilder<int>(
                     // J = Σ H(h)
-                    stream: _database.countTotalTodayFromHours(),
+                    stream: _userId == null ? const Stream.empty() : _database.countTotalTodayFromHours(_userId!),
                     builder: (context, snapshot) => Text(
                       '${snapshot.data ?? 0}',
                       style: const TextStyle(
@@ -146,15 +160,16 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
   }
 
   Stream<Map<int, int>> _hourStreamForFilter() {
+    if (_userId == null) return const Stream.empty();
     switch (_hourFilter) {
       case HourFilterType.depot:
-        return _database.countByHourTodayByType('Dépot');
+        return _database.countByHourTodayByType(_userId!, 'Dépot');
       case HourFilterType.retrait:
-        return _database.countByHourTodayByType('Retrait');
+        return _database.countByHourTodayByType(_userId!, 'Retrait');
       case HourFilterType.transfert:
-        return _database.countByHourTodayByType('Transfert');
+        return _database.countByHourTodayByType(_userId!, 'Transfert');
       case HourFilterType.all:
-        return _database.countByHourToday();
+        return _database.countByHourToday(_userId!);
     }
   }
 
@@ -296,16 +311,16 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
   }
 
   Stream<Map<String, int>> _operatorStreamForFilterToday() {
+    if (_userId == null) return const Stream.empty();
     switch (_operatorFilter) {
       case OperatorFilterType.depot:
-        return _database.countTransactionsByOperatorTodayForType('Dépot');
+        return _database.countTransactionsByOperatorTodayForType(_userId!, 'Dépot');
       case OperatorFilterType.retrait:
-        return _database.countTransactionsByOperatorTodayForType('Retrait');
+        return _database.countTransactionsByOperatorTodayForType(_userId!, 'Retrait');
       case OperatorFilterType.transfert:
-        return _database.countTransactionsByOperatorTodayForType('Transfert');
+        return _database.countTransactionsByOperatorTodayForType(_userId!, 'Transfert');
       case OperatorFilterType.all:
-        return _database
-            .countTransactionsByOperator(); // ta méthode journalière existante
+        return _database.countTransactionsByOperator(_userId!); // ta méthode journalière existante
     }
   }
 
@@ -453,7 +468,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
         ),
         const SizedBox(height: 16),
         StreamBuilder<Map<String, int>>(
-          stream: _database.countTransactionsByType(),
+          stream: _userId == null ? const Stream.empty() : _database.countTransactionsByType(_userId!),
           builder: (context, snapshot) {
             final data = snapshot.data ?? {};
             return Row(
@@ -508,7 +523,7 @@ class _DailyStatsPageState extends State<DailyStatsPage> {
             boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
           ),
           child: StreamBuilder<Map<String, Map<String, Map<String, int>>>>(
-            stream: _database.countTransactionsByHourOperatorTypeToday(),
+            stream: _userId == null ? const Stream.empty() : _database.countTransactionsByHourOperatorTypeToday(_userId!),
             initialData: const {},
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {

@@ -23,7 +23,7 @@ import 'package:aube/database/database.dart';  // ✅ NOUVEAU
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final prefs = await SharedPreferences.getInstance();
+  await SharedPreferences.getInstance();
   
   // Initialize Notification Service
   final notificationService = NotificationService();
@@ -55,8 +55,8 @@ void main() async {
         ),
         
         // ✅ Transaction & Sync Services (NOUVEAU)
-        ProxyProvider2<ApiService, AppDatabase, TransactionService>(
-          update: (_, api, db, __) => TransactionService(api, db),
+        ProxyProvider<ApiService, TransactionService>(
+          update: (_, api, __) => TransactionService(api),
         ),
         ProxyProvider2<TransactionService, AppDatabase, SyncService>(
           update: (_, transactionService, db, __) => SyncService(transactionService, db),
@@ -99,6 +99,7 @@ class MyApp extends StatelessWidget {
               primary: purpleRoyal,
               secondary: purpleElectric,
               surface: white,
+             
               background: bgLight,
               onPrimary: white,
               onSurface: textPrimary,

@@ -20,6 +20,9 @@ class CoinsTable extends Table {
   // CHANGEMENT MAJEUR : Passe à DateTime (pour inclure la date ET l'heure)
   DateTimeColumn get dateDeTransaction => dateTime()();
   
+  // NOUVEAU : ID de l'utilisateur pour cloisonner les données
+  TextColumn get userId => text()();
+  
   // SUPPRIMÉ : Nous n'avons plus besoin d'une colonne séparée pour l'heure.
 }
 

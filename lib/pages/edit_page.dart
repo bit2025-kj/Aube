@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:aube/database/database.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:aube/services/auth_service.dart';
 
 class EditPage extends StatefulWidget {
   final int coinId; // ✅ ID obligatoire pour édition
@@ -32,17 +34,31 @@ class _EditPageState extends State<EditPage> {
   static const Color bleuPrimaire = Color(0xFF3A4F7A);
   static const Color noirSecondaire = Color(0xFF1C1C1C);
 
+  String? _userId;
+
   @override
   void initState() {
     super.initState();
-    _loadTransactionData();
+    _loadUserId();
+  }
+
+  Future<void> _loadUserId() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final id = await authService.getUserId();
+    if (mounted) {
+      setState(() {
+        _userId = id;
+      });
+      _loadTransactionData();
+    }
   }
 
   Future<void> _loadTransactionData() async {
-    // ✅ CHARGER transaction par ID
+    if (_userId == null) return;
+    // ✅ CHARGER transaction par ID et UserID
     final coin = await (_database.select(
       _database.coinsTable,
-    )..where((tbl) => tbl.id.equals(widget.coinId))).getSingleOrNull();
+    )..where((tbl) => tbl.id.equals(widget.coinId) & tbl.userId.equals(_userId!))).getSingleOrNull();
 
     if (coin != null && mounted) {
       _nomController.text = coin.nom;
@@ -366,9 +382,9 @@ class _EditPageState extends State<EditPage> {
     );
 
     try {
-      // ✅ UPDATE par ID
+      // ✅ UPDATE par ID et UserID
       await (_database.update(_database.coinsTable)
-            ..where((tbl) => tbl.id.equals(widget.coinId)))
+            ..where((tbl) => tbl.id.equals(widget.coinId) & tbl.userId.equals(_userId!)))
           .write(transactionCompanion);
       if (context.mounted) {
         ScaffoldMessenger.of(

@@ -18,6 +18,10 @@ class AuthService {
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       final token = data['access_token'];
+      // ✅ Hack: Backend now returns user object with id
+      if (data['user'] != null && data['user']['id'] != null) {
+        await _storage.write(key: 'user_id', value: data['user']['id']);
+      }
       await _storage.write(key: 'token', value: token);
       _apiService.setToken(token);
       return data;
@@ -69,6 +73,10 @@ class AuthService {
 
   Future<String?> getSavedToken() async {
     return await _storage.read(key: 'token');
+  }
+
+  Future<String?> getUserId() async {
+    return await _storage.read(key: 'user_id');
   }
 }
 

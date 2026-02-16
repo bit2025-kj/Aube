@@ -1,6 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:aube/database/database.dart';
+import 'package:provider/provider.dart';
+import 'package:aube/services/auth_service.dart';
 
 const Color kPrimaryColor = Color(0xFF3A4F7A);
 const Color kWhite = Color(0xFFFFFFFF);
@@ -20,6 +22,7 @@ class _WeeklyStatsPageState extends State<WeeklyStatsPage> {
 
   WeeklyOperatorFilter _weeklyOperatorFilter = WeeklyOperatorFilter.all;
   WeekTypeFilter _weekTypeFilter = WeekTypeFilter.all;
+  String? _userId;
 
   String formatSolde(double value) {
     if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}M';
@@ -30,32 +33,45 @@ class _WeeklyStatsPageState extends State<WeeklyStatsPage> {
   @override
   void initState() {
     super.initState();
-    _database.debugWeekData();
+    _loadUserId();
+    // _database.debugWeekData(); // Removed or needs userId
+  }
+
+  Future<void> _loadUserId() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final id = await authService.getUserId();
+    if (mounted) {
+      setState(() {
+        _userId = id;
+      });
+    }
   }
 
   Stream<Map<String, int>> _weeklyOperatorStreamForFilter() {
+    if (_userId == null) return const Stream.empty();
     switch (_weeklyOperatorFilter) {
       case WeeklyOperatorFilter.depot:
-        return _database.countTransactionsByOperatorWeekForType('Dépot');
+        return _database.countTransactionsByOperatorWeekForType(_userId!, 'Dépot');
       case WeeklyOperatorFilter.retrait:
-        return _database.countTransactionsByOperatorWeekForType('Retrait');
+        return _database.countTransactionsByOperatorWeekForType(_userId!, 'Retrait');
       case WeeklyOperatorFilter.transfert:
-        return _database.countTransactionsByOperatorWeekForType('Transfert');
+        return _database.countTransactionsByOperatorWeekForType(_userId!, 'Transfert');
       case WeeklyOperatorFilter.all:
-        return _database.countTransactionsByOperatorWeek();
+        return _database.countTransactionsByOperatorWeek(_userId!);
     }
   }
 
   Stream<Map<String, int>> _weekDayStreamFiltered() {
+    if (_userId == null) return const Stream.empty();
     switch (_weekTypeFilter) {
       case WeekTypeFilter.depot:
-        return _database.countTransactionsByWeekDay(typeFilter: 'Dépot');
+        return _database.countTransactionsByWeekDay(_userId!, typeFilter: 'Dépot');
       case WeekTypeFilter.retrait:
-        return _database.countTransactionsByWeekDay(typeFilter: 'Retrait');
+        return _database.countTransactionsByWeekDay(_userId!, typeFilter: 'Retrait');
       case WeekTypeFilter.transfert:
-        return _database.countTransactionsByWeekDay(typeFilter: 'Transfert');
+        return _database.countTransactionsByWeekDay(_userId!, typeFilter: 'Transfert');
       case WeekTypeFilter.all:
-        return _database.countTransactionsByWeekDay();
+        return _database.countTransactionsByWeekDay(_userId!);
     }
   }
 
@@ -107,7 +123,7 @@ class _WeeklyStatsPageState extends State<WeeklyStatsPage> {
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   StreamBuilder<double>(
-                    stream: _database.soldeTotalStream(),
+                    stream: _userId == null ? const Stream.empty() : _database.soldeTotalStream(_userId!),
                     initialData: 0.0,
                     builder: (context, snapshot) => Text(
                       formatSolde(snapshot.data ?? 0),
@@ -129,7 +145,7 @@ class _WeeklyStatsPageState extends State<WeeklyStatsPage> {
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   StreamBuilder<List<CoinsTableData>>(
-                    stream: _database.watchAllCoins(),
+                    stream: _userId == null ? const Stream.empty() : _database.watchAllCoins(_userId!),
                     builder: (context, snapshot) {
                       final total = snapshot.data?.length ?? 0;
                       return Text(
@@ -400,7 +416,7 @@ class _WeeklyStatsPageState extends State<WeeklyStatsPage> {
         ),
         const SizedBox(height: 16),
         StreamBuilder<Map<String, int>>(
-          stream: _database.countTransactionsByTypeWeek(),
+          stream: _userId == null ? const Stream.empty() : _database.countTransactionsByTypeWeek(_userId!),
           initialData: {'Retrait': 0, 'Dépot': 0, 'Transfert': 0},
           builder: (context, snapshot) {
             final data = snapshot.data!;

@@ -10,6 +10,8 @@ import 'package:share_plus/share_plus.dart' as Shareplus;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:provider/provider.dart';
+import 'package:aube/services/auth_service.dart';
 
 class HistoriquesPage extends StatefulWidget {
   const HistoriquesPage({super.key});
@@ -20,6 +22,23 @@ class HistoriquesPage extends StatefulWidget {
 
 class _HistoriquePageState extends State<HistoriquesPage> {
   final AppDatabase _database = AppDatabase();
+  String? _userId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserId();
+  }
+
+  Future<void> _loadUserId() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final id = await authService.getUserId();
+    if (mounted) {
+      setState(() {
+        _userId = id;
+      });
+    }
+  }
 
   // --- State ---
   String _searchQuery = '';
@@ -367,7 +386,9 @@ class _HistoriquePageState extends State<HistoriquesPage> {
 
   // --- Logic Helpers ---
   Stream<List<CoinsTableData>> _getFilteredStream() {
+    if (_userId == null) return const Stream.empty();
     var query = _database.select(_database.coinsTable)
+      ..where((t) => t.userId.equals(_userId!))
       ..orderBy([(tbl) => OrderingTerm.desc(tbl.dateDeTransaction)]);
     return query.watch();
   }
@@ -534,7 +555,7 @@ class _HistoriquePageState extends State<HistoriquesPage> {
           ),
           TextButton(
             onPressed: () async {
-              await _database.deleteCoin(tx.id);
+              await _database.deleteCoin(tx.id, tx.userId);
               if (mounted) Navigator.pop(ctx);
             },
             child: const Text("Supprimer", style: TextStyle(color: Colors.red)),

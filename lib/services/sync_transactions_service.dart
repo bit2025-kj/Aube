@@ -43,54 +43,17 @@ class SyncService {
     _connectivitySubscription?.cancel();
   }
 
-  /// Synchronisation complète bidirectionnelle
-  Future<void> _fullSync() async {
-    final connectivity = await Connectivity().checkConnectivity();
-    
-    if (connectivity == ConnectivityResult.none) {
-      print('📵 Pas de connexion internet');
-      return;
-    }
-
-    // Vérifier si l'utilisateur est connecté
-    final token = await _storage.read(key: 'token');
-    if (token == null) {
-      print('🔒 Utilisateur non connecté, sync annulée');
-      return;
-    }
-
-    // Vérifier la dernière synchronisation
-    final lastSyncStr = await _storage.read(key: 'last_sync');
-    if (lastSyncStr != null) {
-      final lastSync = DateTime.parse(lastSyncStr);
-      final diff = DateTime.now().difference(lastSync);
-      
-      if (diff.inMinutes < 3) {
-        print('⏱️ Sync récente (il y a ${diff.inMinutes} min), skip');
-        return;
-      }
-    }
-
-    try {
-      print('🔄 Démarrage de la synchronisation bidirectionnelle...');
-      
-      // 1. UPLOAD: Envoyer les transactions locales vers le serveur
-      await _uploadLocalTransactions();
-      
-      // 2. DOWNLOAD: Récupérer les transactions du serveur
-      await _downloadServerTransactions();
-      
-      await _storage.write(key: 'last_sync', value: DateTime.now().toIso8601String());
-      print('✅ Synchronisation bidirectionnelle réussie');
-    } catch (e) {
-      print('❌ Erreur synchronisation: $e');
-    }
-  }
 
   /// ⬆️ Upload: Envoie les transactions locales vers le serveur
   Future<bool> _uploadLocalTransactions() async {
     try {
-      final localTransactions = await _localDb.getAllCoins();
+      final userId = await _storage.read(key: 'user_id');
+      if (userId == null) {
+        print('🔒 Pas de userId trouvé, upload annulé');
+        return false;
+      }
+
+      final localTransactions = await _localDb.getAllCoins(userId);
       
       if (localTransactions.isEmpty) {
         print('📤 Aucune transaction locale à uploader');
@@ -130,12 +93,15 @@ class SyncService {
     try {
       // Récupérer la dernière date de download
       final lastDownloadStr = await _storage.read(key: 'last_download');
-      DateTime? lastDownload;
       if (lastDownloadStr != null) {
-        lastDownload = DateTime.parse(lastDownloadStr);
       }
 
-      // Récupérer toutes les transactions du serveur
+      final userId = await _storage.read(key: 'user_id');
+      if (userId == null) {
+        print('🔒 Pas de userId trouvé, download annulé');
+        return false;
+      }
+
       // Récupérer toutes les transactions du serveur avec pagination
       List<dynamic> serverTransactions = [];
       int skip = 0;
@@ -165,18 +131,18 @@ class SyncService {
       for (final serverTrans in serverTransactions) {
         try {
           // Vérifier si la transaction existe déjà localement
-          final existingLocal = await _findLocalTransaction(serverTrans);
+          final existingLocal = await _findLocalTransaction(serverTrans, userId);
 
           if (existingLocal == null) {
             // Nouvelle transaction: insérer
-            await _insertServerTransactionLocally(serverTrans);
+            await _insertServerTransactionLocally(serverTrans, userId);
             newCount++;
           } else {
             // Transaction existante: vérifier si elle a été modifiée
             final serverDate = DateTime.parse(serverTrans['date_de_transaction']);
             if (serverDate.isAfter(existingLocal.dateDeTransaction)) {
               // La version serveur est plus récente: mettre à jour
-              await _updateLocalTransaction(existingLocal.id, serverTrans);
+              await _updateLocalTransaction(existingLocal.id, serverTrans, userId);
               updatedCount++;
             }
           }
@@ -197,8 +163,8 @@ class SyncService {
   }
 
   /// Trouve une transaction locale correspondante
-  Future<CoinsTableData?> _findLocalTransaction(Map<String, dynamic> serverTrans) async {
-    final allLocal = await _localDb.getAllCoins();
+  Future<CoinsTableData?> _findLocalTransaction(Map<String, dynamic> serverTrans, String userId) async {
+    final allLocal = await _localDb.getAllCoins(userId);
     
     // Chercher par numéro de pièce et date de transaction
     for (final local in allLocal) {
@@ -214,14 +180,15 @@ class SyncService {
   }
 
   /// Insère une transaction du serveur dans la base locale
-  Future<void> _insertServerTransactionLocally(Map<String, dynamic> serverTrans) async {
+  Future<void> _insertServerTransactionLocally(Map<String, dynamic> serverTrans, String userId) async {
     await _localDb.insertCoin(
       CoinsTableCompanion(
+        userId: drift.Value(userId),
         nom: drift.Value(serverTrans['nom']),
         prenom: drift.Value(serverTrans['prenom']),
-        typeDePiece: drift.Value(serverTrans['type_de_piece']),
+        typeDePiece: drift.Value(serverTrans['type_de_transaction'] == 'Dépôt' ? 'Billet' : serverTrans['type_de_piece'] ?? 'Inconnu'), // Hack si null
         numeroDePiece: drift.Value(serverTrans['numero_de_piece']),
-        dateDePeremption: drift.Value(DateTime.parse(serverTrans['date_de_peremption'])),
+        dateDePeremption: drift.Value(DateTime.parse(serverTrans['date_de_peremption'] ?? DateTime.now().toIso8601String())), // Hack si null
         typeDeTransaction: drift.Value(serverTrans['type_de_transaction']),
         montant: drift.Value(serverTrans['montant'].toDouble()),
         operateur: drift.Value(serverTrans['operateur']),
@@ -232,9 +199,10 @@ class SyncService {
   }
 
   /// Met à jour une transaction locale avec les données du serveur
-  Future<void> _updateLocalTransaction(int localId, Map<String, dynamic> serverTrans) async {
+  Future<void> _updateLocalTransaction(int localId, Map<String, dynamic> serverTrans, String userId) async {
     final updated = CoinsTableData(
       id: localId,
+      userId: userId,
       nom: serverTrans['nom'],
       prenom: serverTrans['prenom'],
       typeDePiece: serverTrans['type_de_piece'],

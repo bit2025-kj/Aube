@@ -1,7 +1,7 @@
-import 'dart:ui';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:aube/database/database.dart';
+import 'package:provider/provider.dart';
+import 'package:aube/services/auth_service.dart';
 
 class ManualEntryPage extends StatefulWidget {
   const ManualEntryPage({super.key});
@@ -53,7 +53,7 @@ class _ManualEntryPageState extends State<ManualEntryPage> {
       ),
       decoration: InputDecoration(
         labelText: label + (isOptional ? ' ' : '*'),
-        labelStyle: TextStyle(
+        labelStyle: const TextStyle(
           color: textSecondary,
           fontSize: 13,
           fontWeight: FontWeight.w600,
@@ -311,10 +311,23 @@ class _ManualEntryPageState extends State<ManualEntryPage> {
 
   Future<void> _enregistrerTransaction() async {
     if (!_formKey.currentState!.validate()) return;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final userId = await authService.getUserId();
+
+    if (userId == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('❌ Erreur: Utilisateur non identifié')),
+        );
+      }
+      return;
+    }
+
     await db
         .into(db.coinsTable)
         .insert(
           CoinsTableCompanion.insert(
+            userId: userId,
             nom: _nomController.text.trim(),
             prenom: _prenomController.text.trim(),
             typeDePiece: _selectedTypePiece ?? 'CNIB',

@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:aube/models/advertisement.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class AdBanner extends StatelessWidget {
   final List<Advertisement> ads;

@@ -55,8 +55,8 @@ class NotificationService {
   }
 
   Future<void> showAdNotification(Advertisement ad) async {
-    // Utilise le hashcode du titre comme ID car pas d'ID unique dans le modèle
-    final notifId = 1000 + ad.title.hashCode;
+    // Utilise l'ID unique de la publicité pour éviter les collisions
+    final notifId = 1000 + ad.id.hashCode.abs();
     
     await showNotification(
       notifId,

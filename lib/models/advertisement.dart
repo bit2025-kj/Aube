@@ -1,4 +1,5 @@
 class Advertisement {
+  final String id;
   final String title;
   final String message;
   final String? imageUrl;
@@ -7,6 +8,7 @@ class Advertisement {
   final bool isActive;
 
   Advertisement({
+    required this.id,
     required this.title,
     required this.message,
     this.imageUrl,
@@ -17,6 +19,7 @@ class Advertisement {
 
   factory Advertisement.fromJson(Map<String, dynamic> json) {
     return Advertisement(
+      id: json['_id'] ?? json['id'] ?? '',
       title: json['title'],
       message: json['message'],
       imageUrl: json['image_url'],

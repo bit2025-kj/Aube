@@ -1,14 +1,13 @@
 import 'dart:io';
-import 'dart:ui';
-import 'package:aube/main.dart';
 import 'package:aube/pages/home.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:aube/pages/saisie_manuel.dart';
 import 'package:aube/database/database.dart';
-import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
+import 'package:provider/provider.dart';
+import 'package:aube/services/auth_service.dart';
 
 class NouvelleOperation extends StatefulWidget {
   const NouvelleOperation({super.key});
@@ -27,8 +26,7 @@ class _TransactionModalState extends State<NouvelleOperation> {
   File? _capturedImage;
   bool _isProcessing = false;
   Map<String, String> _cnibData = {};
-  String _selectedType = 'Retrait';
-  String? _selectedOperateur;
+  final String _selectedType = 'Retrait';
   final TextEditingController _numeroDeTelephoneController =
       TextEditingController();
   final TextEditingController _montantController = TextEditingController();
@@ -670,10 +668,23 @@ class _TransactionModalState extends State<NouvelleOperation> {
 
     final montant = double.tryParse(_montantController.text) ?? 0.0;
 
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final userId = await authService.getUserId();
+
+    if (userId == null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('❌ Erreur: Utilisateur non identifié')),
+        );
+      }
+      return;
+    }
+
     await db
         .into(db.coinsTable)
         .insert(
           CoinsTableCompanion.insert(
+            userId: userId,
             nom: _cnibData['nom'] ?? '',
             prenom: _cnibData['prenom'] ?? '',
             typeDePiece: 'CNIB',
